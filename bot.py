@@ -1,7 +1,7 @@
+import os
 import telebot
-import requests
 
-TOKEN = "8103469853:AAHN9z-hcXg9ObcxHOzi3QO0vkwBhResrDc"
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 bot = telebot.TeleBot(TOKEN)
 
