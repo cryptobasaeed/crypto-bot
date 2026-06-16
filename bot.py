@@ -8,76 +8,79 @@ bot = telebot.TeleBot(TOKEN)
 print("Bot Started...")
 
 # =========================
-# CRYPTO (DIRECT - NO MAP = NO BUG)
+# FIND COIN ID (REAL SEARCH)
 # =========================
 
-def get_crypto(symbol):
+def find_coin_id(query):
     try:
-        url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd"
-        r = requests.get(url, timeout=10).json()
-        return r.get(symbol, {}).get("usd")
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/search",
+            params={"query": query},
+            timeout=10
+        ).json()
+
+        coins = r.get("coins", [])
+
+        if not coins:
+            return None
+
+        return coins[0]["id"]
+
     except:
         return None
 
 # =========================
-# SMART NORMALIZER
+# PRICE
 # =========================
 
+def get_price(text):
+    try:
+        coin_id = find_coin_id(text)
+
+        if not coin_id:
+            return None
+
+        r = requests.get(
+            f"https://api.coingecko.com/api/v3/simple/price",
+            params={"ids": coin_id, "vs_currencies": "usd"},
+            timeout=10
+        ).json()
+
+        return r.get(coin_id, {}).get("usd")
+
+    except:
+        return None
+
+# =========================
+# PERSIAN SUPPORT
+# =========================
+
+PERSIAN = {
+    "بیتکوین": "bitcoin",
+    "بیت کوین": "bitcoin",
+    "اتریوم": "ethereum",
+    "سولانا": "solana",
+    "دوج": "dogecoin",
+    "ریپل": "ripple",
+    "شیبا": "shiba-inu",
+    "نات": "notcoin",
+    "داگز": "dogs",
+    "همستر": "hamster-kombat",
+    "ایکس امپایر": "x-empire",
+}
+
 def normalize(text):
-
     text = text.lower().strip()
-
-    mapping = {
-        # BTC
-        "btc": "bitcoin",
-        "bitcoin": "bitcoin",
-        "بیتکوین": "bitcoin",
-        "بیت کوین": "bitcoin",
-
-        # ETH
-        "eth": "ethereum",
-        "ethereum": "ethereum",
-        "اتریوم": "ethereum",
-
-        # SOL
-        "sol": "solana",
-        "solana": "solana",
-        "سولانا": "solana",
-
-        # DOGE
-        "doge": "dogecoin",
-        "dogecoin": "dogecoin",
-        "دوج": "dogecoin",
-
-        # XRP
-        "xrp": "ripple",
-        "ریپل": "ripple",
-
-        # MEME
-        "not": "notcoin",
-        "نات": "notcoin",
-
-        "dogs": "dogs-coin",
-        "داگز": "dogs-coin",
-
-        "hamster": "hamster-kombat",
-        "همستر": "hamster-kombat",
-
-        "xempire": "x-empire",
-        "ایکس": "x-empire",
-    }
-
-    return mapping.get(text, text)
+    return PERSIAN.get(text, text)
 
 # =========================
 # FOREX
 # =========================
 
-def get_forex(base, quote):
+def forex(base, quote):
     try:
         r = requests.get(
-            f"https://api.frankfurter.app/latest?from={base}&to={quote}",
-            timeout=10
+            f"https://api.frankfurter.app/latest?from={base}&to={quote}"
         ).json()
         return r["rates"][quote]
     except:
@@ -87,9 +90,9 @@ def get_forex(base, quote):
 # GOLD
 # =========================
 
-def get_gold():
+def gold():
     try:
-        r = requests.get("https://api.gold-api.com/price/XAU", timeout=10).json()
+        r = requests.get("https://api.gold-api.com/price/XAU").json()
         return r.get("price")
     except:
         return None
@@ -103,12 +106,10 @@ def handle(m):
 
     text = m.text.lower().strip()
 
-    print("Input:", text)
-
     # GOLD
     if text in ["gold", "xau", "طلا"]:
-        price = get_gold()
-        bot.send_message(m.chat.id, f"🥇 Gold: ${price}" if price else "❌ Gold error")
+        p = gold()
+        bot.send_message(m.chat.id, f"🥇 Gold: ${p}" if p else "❌ Gold error")
         return
 
     # FOREX
@@ -116,19 +117,19 @@ def handle(m):
         base = text[:3].upper()
         quote = text[3:].upper()
 
-        price = get_forex(base, quote)
-        if price:
-            bot.send_message(m.chat.id, f"📊 {base}/{quote}: {price}")
+        p = forex(base, quote)
+        if p:
+            bot.send_message(m.chat.id, f"📊 {base}/{quote}: {p}")
         return
 
     # CRYPTO
-    symbol = normalize(text)
-    price = get_crypto(symbol)
+    query = normalize(text)
+    price = get_price(query)
 
     if price:
-        bot.send_message(m.chat.id, f"💰 {text.upper()}: ${price}")
+        bot.send_message(m.chat.id, f"💰 {text}: ${price}")
     else:
-        bot.send_message(m.chat.id, "❌ پیدا نشد (btc / eth / sol / doge / bitcoin)")
+        bot.send_message(m.chat.id, "❌ پیدا نشد")
 
 print("Bot running...")
 bot.infinity_polling()
