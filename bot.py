@@ -5,8 +5,10 @@ import telebot
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
+print("Bot Starting...")
+
 # =========================
-# Special coins (meme / telegram trend)
+# SPECIAL COINS
 # =========================
 
 SPECIAL = {
@@ -15,21 +17,14 @@ SPECIAL = {
     "نات": "notcoin",
 
     "dogs": "dogs-coin",
-    "dog": "dogs-coin",
     "داگز": "dogs-coin",
 
     "hamster": "hamster-kombat",
-    "hmstr": "hamster-kombat",
     "همستر": "hamster-kombat",
 
     "xempire": "x-empire",
-    "empire": "x-empire",
     "ایکس": "x-empire",
 }
-
-# =========================
-# Persian names
-# =========================
 
 PERSIAN = {
     "بیتکوین": "bitcoin",
@@ -38,78 +33,84 @@ PERSIAN = {
     "سولانا": "solana",
     "ریپل": "ripple",
     "دوج": "dogecoin",
-    "کاردانو": "cardano",
-    "ترون": "tron",
-    "تون": "the-open-network",
     "شیبا": "shiba-inu",
 }
 
 # =========================
-# Load TOP 300 correctly
-# (ONLY by market cap, correct ids)
+# TOP COINS (SAFE VERSION)
 # =========================
-
-print("Loading TOP 300 coins...")
 
 TOP = {}
 
-try:
-    r = requests.get(
-        "https://api.coingecko.com/api/v3/coins/markets",
-        params={
-            "vs_currency": "usd",
-            "order": "market_cap_desc",
-            "per_page": 300,
-            "page": 1
-        },
-        timeout=30
-    ).json()
+def load_coins():
+    try:
+        print("Loading coins...")
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/coins/markets",
+            params={
+                "vs_currency": "usd",
+                "order": "market_cap_desc",
+                "per_page": 300,
+                "page": 1
+            },
+            timeout=30
+        )
 
-    for coin in r:
-        symbol = coin["symbol"].lower()
-        name = coin["name"].lower()
-        cid = coin["id"]
+        data = r.json()
 
-        TOP[symbol] = cid
-        TOP[name] = cid
+        if not isinstance(data, list):
+            print("CoinGecko error:", data)
+            return
 
-    print("Loaded coins:", len(TOP))
+        for c in data:
+            TOP[c["symbol"].lower()] = c["id"]
+            TOP[c["name"].lower()] = c["id"]
 
-except Exception as e:
-    print("Error loading TOP coins:", e)
+        print("Coins loaded:", len(TOP))
+
+    except Exception as e:
+        print("Load error:", e)
+
+load_coins()
 
 # =========================
-# Crypto price
+# CRYPTO PRICE (DEBUG VERSION)
 # =========================
 
 def get_crypto(text):
+    key = text.lower().strip()
+
+    print("Searching:", key)
+
+    coin_id = None
+
+    if key in SPECIAL:
+        coin_id = SPECIAL[key]
+    elif key in PERSIAN:
+        coin_id = PERSIAN[key]
+    else:
+        coin_id = TOP.get(key)
+
+    print("Coin ID:", coin_id)
+
+    if not coin_id:
+        return None
+
     try:
-        key = text.lower().strip()
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd"
+        r = requests.get(url, timeout=10)
+        data = r.json()
 
-        if key in SPECIAL:
-            coin_id = SPECIAL[key]
-
-        elif key in PERSIAN:
-            coin_id = PERSIAN[key]
-
-        else:
-            coin_id = TOP.get(key)
-
-        if not coin_id:
-            return None
-
-        data = requests.get(
-            f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd",
-            timeout=10
-        ).json()
+        print("API response:", data)
 
         return data.get(coin_id, {}).get("usd")
 
-    except:
+    except Exception as e:
+        print("Price error:", e)
         return None
 
 # =========================
-# Forex
+# FOREX
 # =========================
 
 def get_forex(base, quote):
@@ -124,7 +125,7 @@ def get_forex(base, quote):
         return None
 
 # =========================
-# Gold
+# GOLD
 # =========================
 
 def get_gold():
@@ -135,7 +136,7 @@ def get_gold():
         return None
 
 # =========================
-# Handler
+# HANDLER
 # =========================
 
 @bot.message_handler(func=lambda m: True)
@@ -143,10 +144,12 @@ def handle(m):
 
     text = m.text.lower().strip()
 
+    print("Message:", text)
+
     # GOLD
     if text in ["gold", "xau", "طلا"]:
         p = get_gold()
-        bot.send_message(m.chat.id, f"🥇 Gold: ${p}" if p else "❌ طلا")
+        bot.send_message(m.chat.id, f"🥇 Gold: ${p}" if p else "❌ Gold error")
         return
 
     # FOREX
@@ -160,20 +163,12 @@ def handle(m):
         return
 
     # CRYPTO
-    p = get_crypto(text)
-    if p:
-        bot.send_message(m.chat.id, f"💰 {text.upper()}: ${p}")
-        return
+    price = get_crypto(text)
 
-    bot.send_message(
-        m.chat.id,
-        "📌 مثال:\n"
-        "btc / bitcoin / بیت کوین\n"
-        "sol / سولانا\n"
-        "not / داگز / همستر / x empire\n"
-        "eurusd\n"
-        "gold / طلا"
-    )
+    if price is not None:
+        bot.send_message(m.chat.id, f"💰 {text.upper()}: ${price}")
+    else:
+        bot.send_message(m.chat.id, "❌ پیدا نشد (کنسول رو چک کن)")
 
 print("Bot Started...")
 bot.infinity_polling()
