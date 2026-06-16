@@ -9,11 +9,9 @@ TOKEN = os.getenv("BOT_TOKEN")
 
 def get_price(symbol):
     try:
-        return float(
-            requests.get(
-                f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-            ).json()["price"]
-        )
+        return float(requests.get(
+            f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        ).json()["price"])
     except:
         return None
 
@@ -22,12 +20,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("ربات روشن شد 🚀")
 
 
-async def price_loop(app):
+async def price_loop():
     print("PRICE LOOP STARTED")
 
     while True:
         btc = get_price("BTCUSDT")
-
         if btc:
             print("BTC:", btc)
 
@@ -41,11 +38,11 @@ def main():
 
     print("Bot Started...")
 
-    async def runner():
-        await price_loop(app)
+    async def run():
+        asyncio.create_task(price_loop())
 
-    # 🔥 مهم: بعد از start_polling اجرا میشه
-    app.post_init = lambda app: asyncio.create_task(runner())
+    # 🔥 روش درست PTB
+    app.post_init = run
 
     app.run_polling()
 
