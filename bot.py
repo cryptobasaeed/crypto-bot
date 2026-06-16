@@ -8,40 +8,115 @@ bot = telebot.TeleBot(TOKEN)
 print("Bot Started...")
 
 # =========================
-# FIND COIN ID (REAL SEARCH)
+# SPECIAL COINS (MEME + TELEGRAM)
 # =========================
 
-def find_coin_id(query):
+SPECIAL = {
+    "not": "notcoin",
+    "notcoin": "notcoin",
+    "نات": "notcoin",
+
+    "dogs": "dogs-coin",
+    "داگز": "dogs-coin",
+
+    "hamster": "hamster-kombat",
+    "همستر": "hamster-kombat",
+
+    "xempire": "x-empire",
+    "ایکس": "x-empire",
+}
+
+# =========================
+# PERSIAN MAP (FIXED CORE COINS)
+# =========================
+
+PERSIAN = {
+    "بیتکوین": "bitcoin",
+    "بیت کوین": "bitcoin",
+    "btc": "bitcoin",
+    "bitcoin": "bitcoin",
+
+    "اتریوم": "ethereum",
+    "eth": "ethereum",
+    "ethereum": "ethereum",
+
+    "سولانا": "solana",
+    "sol": "solana",
+
+    "دوج": "dogecoin",
+    "doge": "dogecoin",
+
+    "ریپل": "ripple",
+    "xrp": "ripple",
+
+    "شیبا": "shiba-inu",
+    "shib": "shiba-inu",
+
+    "ترون": "tron",
+    "trx": "tron",
+
+    "تون": "the-open-network",
+    "ton": "the-open-network",
+}
+
+# =========================
+# TOP 300 COINS CACHE (REAL IDs)
+# =========================
+
+TOP = {}
+
+def load_top():
     try:
         r = requests.get(
-            "https://api.coingecko.com/api/v3/search",
-            params={"query": query},
-            timeout=10
+            "https://api.coingecko.com/api/v3/coins/markets",
+            params={
+                "vs_currency": "usd",
+                "order": "market_cap_desc",
+                "per_page": 300,
+                "page": 1
+            },
+            timeout=30
         ).json()
 
-        coins = r.get("coins", [])
+        for c in r:
+            TOP[c["symbol"].lower()] = c["id"]
+            TOP[c["name"].lower()] = c["id"]
 
-        if not coins:
-            return None
+        print("Loaded TOP coins:", len(TOP))
 
-        return coins[0]["id"]
+    except Exception as e:
+        print("TOP load error:", e)
 
-    except:
-        return None
+load_top()
+
+# =========================
+# NORMALIZER
+# =========================
+
+def resolve(text):
+    t = text.lower().strip()
+
+    if t in SPECIAL:
+        return SPECIAL[t]
+
+    if t in PERSIAN:
+        return PERSIAN[t]
+
+    return TOP.get(t)
 
 # =========================
 # PRICE
 # =========================
 
 def get_price(text):
+    coin_id = resolve(text)
+
+    if not coin_id:
+        return None
+
     try:
-        coin_id = find_coin_id(text)
-
-        if not coin_id:
-            return None
-
         r = requests.get(
-            f"https://api.coingecko.com/api/v3/simple/price",
+            "https://api.coingecko.com/api/v3/simple/price",
             params={"ids": coin_id, "vs_currencies": "usd"},
             timeout=10
         ).json()
@@ -50,28 +125,6 @@ def get_price(text):
 
     except:
         return None
-
-# =========================
-# PERSIAN SUPPORT
-# =========================
-
-PERSIAN = {
-    "بیتکوین": "bitcoin",
-    "بیت کوین": "bitcoin",
-    "اتریوم": "ethereum",
-    "سولانا": "solana",
-    "دوج": "dogecoin",
-    "ریپل": "ripple",
-    "شیبا": "shiba-inu",
-    "نات": "notcoin",
-    "داگز": "dogs",
-    "همستر": "hamster-kombat",
-    "ایکس امپایر": "x-empire",
-}
-
-def normalize(text):
-    text = text.lower().strip()
-    return PERSIAN.get(text, text)
 
 # =========================
 # FOREX
@@ -109,27 +162,25 @@ def handle(m):
     # GOLD
     if text in ["gold", "xau", "طلا"]:
         p = gold()
-        bot.send_message(m.chat.id, f"🥇 Gold: ${p}" if p else "❌ Gold error")
+        bot.send_message(m.chat.id, f"🥇 Gold: ${p}" if p else "❌")
         return
 
     # FOREX
     if len(text) == 6 and text.isalpha():
         base = text[:3].upper()
         quote = text[3:].upper()
-
         p = forex(base, quote)
         if p:
             bot.send_message(m.chat.id, f"📊 {base}/{quote}: {p}")
         return
 
     # CRYPTO
-    query = normalize(text)
-    price = get_price(query)
+    price = get_price(text)
 
     if price:
         bot.send_message(m.chat.id, f"💰 {text}: ${price}")
     else:
-        bot.send_message(m.chat.id, "❌ پیدا نشد")
+        bot.send_message(m.chat.id, "❌ پیدا نشد (نماد را درست وارد کن)")
 
 print("Bot running...")
 bot.infinity_polling()
