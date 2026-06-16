@@ -1,114 +1,212 @@
 import os
+import requests
 import telebot
+
+# =========================
+# Telegram
+# =========================
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
+if not TOKEN:
+    raise ValueError("TELEGRAM_BOT_TOKEN not found")
+
 bot = telebot.TeleBot(TOKEN)
 
-# -------------------------
-# اسم‌ها (فارسی → کریپتو)
-# -------------------------
-SYMBOLS = {
+# =========================
+# Persian aliases
+# =========================
+
+PERSIAN_COINS = {
     "بیتکوین": "bitcoin",
-    "btc": "bitcoin",
+    "بیت کوین": "bitcoin",
     "اتریوم": "ethereum",
-    "eth": "ethereum",
-    "تتر": "tether",
-    "usdt": "tether",
+    "سولانا": "solana",
+    "ریپل": "ripple",
+    "دوج": "dogecoin",
+    "کاردانو": "cardano",
+    "ترون": "tron",
+    "تون": "the-open-network",
+    "بایننس": "binancecoin",
+    "شیبا": "shiba-inu",
+    "پپه": "pepe"
 }
 
-# -------------------------
-# کریپتو از CoinGecko
-# -------------------------
-def get_crypto_price(coin):
+# =========================
+# Load CoinGecko list
+# =========================
+
+print("Loading CoinGecko coins...")
+
+COIN_MAP = {}
+
+try:
+    coins = requests.get(
+        "https://api.coingecko.com/api/v3/coins/list",
+        timeout=30
+    ).json()
+
+    for coin in coins:
+        symbol = coin["symbol"].lower()
+        name = coin["name"].lower()
+
+        COIN_MAP[symbol] = coin["id"]
+        COIN_MAP[name] = coin["id"]
+
+    print(f"Loaded {len(COIN_MAP)} symbols/names")
+
+except Exception as e:
+    print("Coin list error:", e)
+
+# =========================
+# Crypto Price
+# =========================
+
+def get_crypto_price(user_input):
     try:
-        url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin}&vs_currencies=usd"
-        r = requests.get(url, timeout=10).json()
-        return r.get(coin, {}).get("usd")
+
+        key = user_input.lower().strip()
+
+        if key in PERSIAN_COINS:
+            coin_id = PERSIAN_COINS[key]
+        else:
+            coin_id = COIN_MAP.get(key)
+
+        if not coin_id:
+            return None
+
+        data = requests.get(
+            f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd",
+            timeout=10
+        ).json()
+
+        return data.get(coin_id, {}).get("usd")
+
     except:
         return None
 
-# -------------------------
-# دلار/تومان از نوبیتکس
-# -------------------------
-def get_usdt_irr():
+# =========================
+# Forex
+# =========================
+
+def get_forex(base, quote):
     try:
-        url = "https://api.nobitex.ir/market/stats"
-        r = requests.get(url, timeout=10).json()
-        return r["stats"]["usdt-rls"]["latest"]
+
+        data = requests.get(
+            f"https://api.frankfurter.app/latest?from={base}&to={quote}",
+            timeout=10
+        ).json()
+
+        return data["rates"][quote]
+
     except:
         return None
 
-# -------------------------
-# فارکس (Exchangerate API)
-# -------------------------
-def get_forex(pair):
+# =========================
+# Gold
+# =========================
+
+def get_gold():
     try:
-        base = pair[:3].upper()
-        symbol = pair[3:].upper()
 
-        url = f"https://api.exchangerate.host/latest?base={base}&symbols={symbol}"
-        r = requests.get(url, timeout=10).json()
+        data = requests.get(
+            "https://api.gold-api.com/price/XAU",
+            timeout=10
+        ).json()
 
-        return r["rates"][symbol]
+        return data.get("price")
+
     except:
         return None
 
-# -------------------------
-# فارکس لیست
-# -------------------------
-FOREX = {
-    "eurusd": "EURUSD",
-    "gbpusd": "GBPUSD",
-    "usdjpy": "USDJPY",
-    "usdtry": "USDTRY",
-}
+# =========================
+# Handler
+# =========================
 
-# -------------------------
-# هندل پیام
-# -------------------------
 @bot.message_handler(func=lambda message: True)
 def handle(message):
-    text = message.text.lower().strip()
 
-    # ---------------- دلار / تتر ----------------
-    if text in ["دلار", "usd", "تتر", "usdt"]:
-        price = get_usdt_irr()
-        if price:
-            bot.send_message(message.chat.id, f"💵 دلار/تتر: {price} تومان")
-        else:
-            bot.send_message(message.chat.id, "❌ خطا در گرفتن قیمت دلار")
-        return
+    text = message.text.strip().lower()
 
-    # ---------------- فارکس ----------------
-    if text in FOREX:
-        pair = FOREX[text]
-        price = get_forex(pair)
-        if price:
-            bot.send_message(message.chat.id, f"📊 {pair}: {price}")
-        else:
-            bot.send_message(message.chat.id, "❌ خطا در فارکس")
-        return
+    # ---------------------
+    # Gold
+    # ---------------------
 
-    # ---------------- کریپتو ----------------
-    if text in SYMBOLS:
-        coin = SYMBOLS[text]
-        price = get_crypto_price(coin)
+    if text in ["gold", "xau", "طلا"]:
+
+        price = get_gold()
 
         if price:
-            bot.send_message(message.chat.id, f"💰 {coin.upper()} : ${price}")
+            bot.send_message(
+                message.chat.id,
+                f"🥇 Gold (XAU/USD)\n💰 ${price}"
+            )
         else:
-            bot.send_message(message.chat.id, "❌ قیمت کریپتو پیدا نشد")
+            bot.send_message(
+                message.chat.id,
+                "❌ خطا در دریافت قیمت طلا"
+            )
+
         return
 
-    # ---------------- پیام پیشفرض ----------------
+    # ---------------------
+    # Forex
+    # ---------------------
+
+    if len(text) == 6 and text.isalpha():
+
+        base = text[:3].upper()
+        quote = text[3:].upper()
+
+        price = get_forex(base, quote)
+
+        if price is not None:
+
+            bot.send_message(
+                message.chat.id,
+                f"📊 {base}/{quote}\n💰 {price}"
+            )
+
+            return
+
+    # ---------------------
+    # Crypto
+    # ---------------------
+
+    crypto_price = get_crypto_price(text)
+
+    if crypto_price is not None:
+
+        bot.send_message(
+            message.chat.id,
+            f"🪙 {text.upper()}\n💰 ${crypto_price}"
+        )
+
+        return
+
+    # ---------------------
+    # Help
+    # ---------------------
+
     bot.send_message(
         message.chat.id,
-        "📌 بنویس:\n"
-        "- BTC یا بیتکوین\n"
-        "- دلار یا تتر\n"
-        "- EURUSD یا USDJPY"
+        "📌 نمونه‌ها:\n\n"
+        "btc\n"
+        "bitcoin\n"
+        "بیت کوین\n\n"
+        "eth\n"
+        "ethereum\n"
+        "اتریوم\n\n"
+        "sol\n"
+        "solana\n"
+        "سولانا\n\n"
+        "eurusd\n"
+        "gbpusd\n"
+        "usdjpy\n\n"
+        "gold\n"
+        "طلا"
     )
 
-print("bot started")
-bot.polling()
+print("Bot Started...")
+
+bot.infinity_polling(skip_pending=True)
