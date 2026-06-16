@@ -6,9 +6,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-# -----------------------
-# Binance Price Fetch
-# -----------------------
+
 def get_price(symbol):
     url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
     try:
@@ -18,17 +16,13 @@ def get_price(symbol):
         return None
 
 
-# -----------------------
-# Start Command
-# -----------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("ربات حرفه‌ای فعال شد 🚀")
+    await update.message.reply_text("ربات روشن شد 🚀")
 
 
-# -----------------------
-# Price Monitor Loop
-# -----------------------
-async def price_monitor(app):
+async def price_loop(app):
+    print("PRICE LOOP STARTED")
+
     btc_last = None
 
     while True:
@@ -37,22 +31,22 @@ async def price_monitor(app):
         if btc:
             print("BTC:", btc)
 
-            # مثال ساده آلارم
-            if btc_last:
-                if abs(btc - btc_last) >= 1000:
-                    await app.bot.send_message(
-                        chat_id="@your_channel_or_user_id",
-                        text=f"BTC تغییر شدید: {btc}$ 🚨"
-                    )
+            if btc_last and abs(btc - btc_last) >= 1000:
+                await app.bot.send_message(
+                    chat_id=update_chat_id(app),
+                    text=f"BTC تغییر شدید: {btc}$ 🚨"
+                )
 
             btc_last = btc
 
         await asyncio.sleep(10)
 
 
-# -----------------------
-# Main
-# -----------------------
+def update_chat_id(app):
+    # فعلاً ساده (بعداً multi-user می‌کنیم)
+    return list(app.bot.get_updates())[-1].message.chat_id
+
+
 def main():
     app = Application.builder().token(TOKEN).build()
 
@@ -60,8 +54,10 @@ def main():
 
     print("Bot Started...")
 
-    # background task
-    app.job_queue.run_once(lambda ctx: asyncio.create_task(price_monitor(app)), 1)
+    async def run_loop():
+        await price_loop(app)
+
+    app.create_task(run_loop())
 
     app.run_polling()
 
